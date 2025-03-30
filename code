@@ -1,0 +1,131 @@
+import pandas as pd  # Librería para manejar y almacenar los datos en un DataFrame
+from selenium import webdriver  # Selenium para automatizar la navegación en la web
+from selenium.webdriver.chrome.service import Service  # Servicio para el controlador de Chrome
+from selenium.webdriver.chrome.options import Options  # Configuración de opciones para Chrome
+from selenium.webdriver.common.by import By  # Permite ubicar elementos en la página web
+import time  # Permite usar "sleep" para esperar a que se cargue el contenido
+
+
+# Configurar opciones de Chrome
+chrome_options = Options()
+chrome_options.add_argument("--headless")  # Ejecutar en modo "headless" (sin interfaz gráfica)
+chrome_options.add_argument("--no-sandbox")  # Evitar problemas de permisos en entornos de servidor
+chrome_options.add_argument("--disable-dev-shm-usage")  # Evitar el uso excesivo de memoria compartida
+
+# Especificar la ruta correcta de Chrome
+chrome_options.binary_location = "/usr/bin/google-chrome"  # Ubicación del binario de Chrome en Linux
+
+# Configurar ChromeDriver con la versión correcta
+service = Service("/usr/bin/chromedriver")  # Indica la ubicación del driver de Chrome
+driver = webdriver.Chrome(service=service, options=chrome_options)  # Inicializa el navegador con las opciones configuradas
+
+# Cargar la página principal de La Vanguardia
+driver.get("https://www.lavanguardia.com")
+time.sleep(10)  # Esperar 10 segundos para que cargue completamente
+
+# Realizar "infinite scroll" para cargar más noticias
+for _ in range(5):  # Repite el proceso de desplazamiento 5 veces
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")  # Baja hasta el final de la página
+    time.sleep(2)  # Espera 2 segundos antes de volver a hacer scroll
+
+# Obtener los enlaces de las noticias (máximo 10 noticias)
+article_links = [a.get_attribute('href') for a in driver.find_elements(By.CSS_SELECTOR, 'article.article-module a')[:10]]
+
+# Inicializamos las listas donde se guardarán los datos
+titles, links, images, dates, authors, epigraphs = [], [], [], [], [], []
+
+# Conjunto para almacenar enlaces ya visitados y evitar duplicados
+visited_links = set()
+
+
+def find_lavanguardia_article(url):
+    '''
+    Función que recibe la URL de un artículo y extrae:
+    - Título
+    - Imagen destacada
+    - Fecha de publicación
+    - Autor
+    - Epígrafe
+    '''
+    
+    print(url)  # Muestra en consola la URL que se está procesando
+    driver.get(url)  # Accede a la página del artículo
+    time.sleep(5)  # Espera 5 segundos para que cargue el contenido
+
+
+    # Obtener el título del artículo
+    try:
+        title = driver.find_element(By.CSS_SELECTOR, 'h1').text  # Busca la etiqueta <h1> donde normalmente está el título
+    except:
+        title = "Título no disponible"
+
+    # Obtener la imagen destacada del artículo
+    try:
+        img_element = driver.find_element(By.CSS_SELECTOR, 'meta[property="og:image"]')  # Busca la imagen en el meta-tag
+        img_url = img_element.get_attribute('content')  # Obtiene la URL de la imagen
+    except:
+        img_url = "No Image"
+
+    # Obtener la fecha de publicación
+    try:
+        date_element = driver.find_element(By.CSS_SELECTOR, 'div.author-date-time time.created')  # Ubica la fecha de publicación
+        article_date = date_element.text.strip()  # Extrae y limpia el texto
+    except:
+        article_date = "No Date"
+
+    # Obtener el autor del artículo
+    try:
+        author_element = driver.find_element(By.CSS_SELECTOR, 'div.author-name')  # Ubica el nombre del autor
+        author_name = author_element.text.strip()  # Extrae el nombre del autor
+    except:
+        author_name = "Autor no disponible"
+
+    # Obtener el epígrafe del artículo
+    try:
+        epigraph_element = driver.find_element(By.CSS_SELECTOR, 'div.epigraph-container')  # Busca el epígrafe en la noticia
+        epigraph = epigraph_element.text.strip()  # Extrae el epígrafe
+    except:
+        epigraph = "Epígrafe no disponible"
+
+    return title, img_url, article_date, author_name, epigraph
+
+# Recorrer todos los enlaces de las noticias y obtener los datos
+for article_url in article_links:
+    try:
+        if article_url not in visited_links: # Verifica que el enlace no haya sido visitado antes
+            title, img_url, article_date, author_name, epigraph = find_lavanguardia_article(article_url) # Extrae los datos de la noticia
+
+            # Agregar los datos a las listas
+            titles.append(title)
+            links.append(article_url)
+            images.append(img_url)
+            dates.append(article_date)
+            authors.append(author_name)
+            epigraphs.append(epigraph)
+
+            # Agregar el enlace actual al conjunto de enlaces visitados
+            visited_links.add(article_url)
+    except Exception as e:
+        print(f"Error al procesar el artículo {article_url}: {e}") # Muestra si hay algún error al procesar una noticia
+
+# Verifica que todas las listas tengan la misma cantidad de elementos antes de crear el DataFrame
+if len(titles) == len(links) == len(dates) == len(images) == len(authors) == len(epigraphs):
+    # Crear un DataFrame con los datos extraídos
+    news_df = pd.DataFrame({
+        'Title': titles,
+        'Link': links,
+        'Date': dates,
+        'Image': images,
+        'Author': authors,
+        'Epigraph': epigraphs
+    })
+
+    # Guardar los datos en un archivo CSV llamado 'lavanguardia_dataset.csv'
+    news_df.to_csv('lavanguardia_dataset.csv', index=False)
+
+    # Cierra el navegador
+    driver.quit()
+    
+    print('Dataset creado y guardado.')  # Muestra un mensaje indicando que el proceso ha finalizado correctamente
+else:
+    print('Error: Las listas de títulos y enlaces tienen longitudes diferentes.')
