@@ -1,0 +1,6 @@
+import pandas as pd  # Librería para manejar y almacenar los datos en un DataFrame
+from selenium import webdriver  # Selenium para automatizar la navegación en la web
+from selenium.webdriver.chrome.service import Service  # Servicio para el controlador de Chrome
+from selenium.webdriver.chrome.options import Options  # Configuración de opciones para Chrome
+from selenium.webdriver.common.by import By  # Permite ubicar elementos en la página web
+import time  # Permite usar "sleep" para esperar a que se cargue el contenido
